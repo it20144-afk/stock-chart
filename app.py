@@ -17,13 +17,13 @@ st.sidebar.header("검색 및 설정")
 search_input = st.sidebar.text_input("검색어 (4개, 쉼표 구분)", "AAPL, TSLA, NVDA, MSFT")
 days_to_display = st.sidebar.slider("차트 표시 기간 (일)", 30, 365, 120)
 
-# 종목명 -> 티커 변환 함수 (검색 실패 시를 위해 개선)
+# 종목명 -> 티커 변환 함수 (검색 기능 강화)
 def get_ticker_from_name(query):
     query = query.strip()
     if query.isdigit() and len(query) == 6: return f"{query}.KS"
     try:
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=1"
-        res = requests.get(url, headers={'User-agent': 'Mozilla/5.0'})
+        res = requests.get(url, headers={'User-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebkit/537.36'})
         data = res.json()
         if data['quotes']:
             return data['quotes'][0]['symbol']
@@ -54,12 +54,15 @@ def get_indicators(df):
 def plot_full_chart(ticker_query):
     try:
         ticker = get_ticker_from_name(ticker_query)
-        # 데이터 수집 방식 최적화 (auto_adjust 추가)
-        df = yf.download(ticker, start=datetime.now() - timedelta(days=500), progress=False, auto_adjust=True)
+        
+        # [핵심 수정] 데이터 수집 시 'proxy'와 'session' 문제를 우회하기 위한 설정
+        dat = yf.Ticker(ticker)
+        df = dat.history(period="2y") # download 대신 history 메서드 사용 (더 안정적)
         
         if df.empty and ('.KS' in ticker or ticker.isdigit()):
             alt_ticker = ticker.replace('.KS', '.KQ') if '.KS' in ticker else f"{ticker}.KQ"
-            df = yf.download(alt_ticker, start=datetime.now() - timedelta(days=500), progress=False, auto_adjust=True)
+            dat = yf.Ticker(alt_ticker)
+            df = dat.history(period="2y")
             if not df.empty: ticker = alt_ticker
 
         if df.empty: return None, ticker
@@ -91,7 +94,8 @@ def plot_full_chart(ticker_query):
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1.05, text=curr_info, showarrow=False, font=dict(size=12, color="yellow"))
         
         return fig, ticker
-    except: return None, ticker_query
+    except Exception as e:
+        return None, f"{ticker_query} ({str(e)})"
 
 # 레이아웃 배치
 queries = [q.strip() for q in search_input.split(',')][:4]
@@ -99,7 +103,7 @@ if queries:
     cols = st.columns(2)
     for i, q in enumerate(queries):
         with cols[i % 2]:
-            fig, final_ticker = plot_full_chart(q)
+            fig, info = plot_full_chart(q)
             st.markdown(f"### 📍 {q}")
             if fig: st.plotly_chart(fig, use_container_width=True)
-            else: st.error(f"'{q}' ({final_ticker}) 데이터 수집 실패")
+            else: st.error(f"데이터 수집 실패: {info}")
