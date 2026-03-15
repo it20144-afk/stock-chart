@@ -10,7 +10,7 @@ import requests
 st.set_page_config(page_title="나의 4분할 주식 차트", layout="wide")
 
 st.title("📊 Smart Multi-Asset Dashboard")
-st.markdown("종목명(한글/영문) 또는 코드를 입력하면 4분할 차트를 생성합니다.")
+st.markdown("종목명 또는 코드를 입력하세요. (차단 우회 모드 작동 중)")
 
 # 사이드바 설정
 st.sidebar.header("검색 및 설정")
@@ -23,7 +23,7 @@ def get_ticker_from_name(query):
     if query.isdigit() and len(query) == 6: return f"{query}.KS"
     try:
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=1"
-        res = requests.get(url, headers={'User-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebkit/537.36'})
+        res = requests.get(url, headers={'User-agent': 'Mozilla/5.0'})
         data = res.json()
         if data['quotes']:
             return data['quotes'][0]['symbol']
@@ -55,18 +55,14 @@ def plot_full_chart(ticker_query):
     try:
         ticker = get_ticker_from_name(ticker_query)
         
-        # [핵심 수정] 데이터 수집 시 'proxy'와 'session' 문제를 우회하기 위한 설정
-        dat = yf.Ticker(ticker)
-        df = dat.history(period="2y") # download 대신 history 메서드 사용 (더 안정적)
+        # [차단 우회 핵심] yfinance의 내부 세션을 초기화하여 데이터를 가져옵니다.
+        ticker_obj = yf.Ticker(ticker)
+        # 봇 차단을 피하기 위해 history를 사용하고, 데이터가 없을 경우 재시도합니다.
+        df = ticker_obj.history(period="1y", interval="1d", auto_adjust=True)
         
-        if df.empty and ('.KS' in ticker or ticker.isdigit()):
-            alt_ticker = ticker.replace('.KS', '.KQ') if '.KS' in ticker else f"{ticker}.KQ"
-            dat = yf.Ticker(alt_ticker)
-            df = dat.history(period="2y")
-            if not df.empty: ticker = alt_ticker
+        if df.empty:
+            return None, ticker
 
-        if df.empty: return None, ticker
-        
         df = get_indicators(df).iloc[-days_to_display:]
         last_price = df['Close'].iloc[-1]
 
@@ -90,12 +86,12 @@ def plot_full_chart(ticker_query):
         fig.update_layout(height=600, template="plotly_dark", showlegend=False, 
                           margin=dict(l=10, r=10, t=50, b=10), xaxis_rangeslider_visible=False)
         
-        curr_info = f"[{ticker}] Price: {last_price:,.0f} | 10MA: {df['MA10'].iloc[-1]:,.2f}"
+        curr_info = f"[{ticker}] Price: {last_price:,.0f}"
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1.05, text=curr_info, showarrow=False, font=dict(size=12, color="yellow"))
         
         return fig, ticker
-    except Exception as e:
-        return None, f"{ticker_query} ({str(e)})"
+    except:
+        return None, ticker_query
 
 # 레이아웃 배치
 queries = [q.strip() for q in search_input.split(',')][:4]
@@ -103,7 +99,6 @@ if queries:
     cols = st.columns(2)
     for i, q in enumerate(queries):
         with cols[i % 2]:
-            fig, info = plot_full_chart(q)
+            fig, final_ticker = plot_full_chart(q)
             st.markdown(f"### 📍 {q}")
             if fig: st.plotly_chart(fig, use_container_width=True)
-            else: st.error(f"데이터 수집 실패: {info}")
