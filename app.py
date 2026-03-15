@@ -53,7 +53,7 @@ def get_indicators(df):
 def plot_full_chart(ticker_query):
     try:
         ticker = get_ticker_from_name(ticker_query)
-        df = yf.download(ticker, start=datetime.now() - timedelta(days=500), progress=False)
+        df = yf.download(ticker, start=datetime.now() - timedelta(days=500), progress=False, auto_adjust=True)
         
         if df.empty and ticker.isdigit():
             df = yf.download(f"{ticker}.KQ", start=datetime.now() - timedelta(days=500), progress=False)
