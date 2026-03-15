@@ -103,5 +103,3 @@ if queries:
             st.markdown(f"### 📍 {q}")
             if fig: st.plotly_chart(fig, use_container_width=True)
             else: st.error(f"'{q}' ({final_ticker}) 데이터 수집 실패")
-            if fig: st.plotly_chart(fig, use_container_width=True)
-            else: st.error(f"'{q}' 검색 실패")
